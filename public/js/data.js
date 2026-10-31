@@ -74,32 +74,52 @@ export const dayToDate = (day) => new Date(EPOCH + day * DAY_MS);
 export const dateToDay = (y, m = 1, d = 1) => Math.round((Date.UTC(y, m - 1, d) - EPOCH) / DAY_MS);
 
 export async function loadDataset(onProgress) {
-  const { version } = await fetch('/api/version').then((r) => r.json());
-  const meta = await fetch(`/data/meta.json?v=${version}`).then((r) => r.json());
-  const buffer = await fetchWithProgress(`/data/points.bin?v=${version}`, meta.byteLength, onProgress);
-  return new Dataset(meta, buffer);
+  const manifest = await fetch('data/manifest.json', { cache: 'no-cache' }).then((r) => r.json());
+  const v = encodeURIComponent(manifest.version);
+  const [meta, buffer] = await Promise.all([
+    fetch(`data/meta.json?v=${v}`).then((r) => r.json()),
+    fetchWithProgress(`${manifest.points.url}?v=${v}`, manifest.points.bytes, onProgress),
+  ]);
+  return new Dataset(meta, buffer, manifest);
 }
 
 async function fetchWithProgress(url, total, onProgress) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
-  if (!res.body || !total) return res.arrayBuffer();
-  const out = new Uint8Array(total);
-  const reader = res.body.getReader();
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    out.set(value, received);
-    received += value.length;
-    onProgress?.(received / total);
+  let bytes;
+  if (!res.body) {
+    bytes = new Uint8Array(await res.arrayBuffer());
+  } else {
+    const parts = [];
+    const reader = res.body.getReader();
+    let received = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      received += value.length;
+      onProgress?.(Math.min(1, received / total));
+    }
+    bytes = new Uint8Array(received);
+    let offset = 0;
+    for (const p of parts) {
+      bytes.set(p, offset);
+      offset += p.length;
+    }
   }
-  return out.buffer;
+  // Static hosts serve points.bin.gz as plain bytes; decompress it here. (When a server
+  // sends it with Content-Encoding instead, the browser has already done so.)
+  if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Response(stream).arrayBuffer();
+  }
+  return bytes.buffer;
 }
 
 export class Dataset {
-  constructor(meta, buffer) {
+  constructor(meta, buffer, manifest) {
     this.meta = meta;
+    this.manifest = manifest;
     this.count = meta.count;
     const cols = {};
     for (const c of meta.columns) {

@@ -63,7 +63,7 @@ em, i { font-style: italic; }
 
 .sheet-handle { display: none; }
 
-.panel-head { padding: 14px 16px 10px; display: grid; gap: 10px; }
+.panel-head { padding: 14px 16px 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 
 .brand { display: flex; align-items: center; gap: 9px; }
 .brand h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 0.2px; }

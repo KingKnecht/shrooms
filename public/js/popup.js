@@ -7,6 +7,24 @@ const BASIS_LABELS = {
   PRESERVED_SPECIMEN: 'Herbarium specimen',
 };
 
+// Per-point extras come in chunk files of meta.detailsChunk points each:
+// [gbifKey, locality, recordedBy, dataset, photoUrl] per point.
+const chunks = new Map();
+
+function loadDetails(ds, index) {
+  const n = Math.floor(index / ds.meta.detailsChunk);
+  if (!chunks.has(n)) {
+    const url = `data/details/${n}.json?v=${encodeURIComponent(ds.manifest.version)}`;
+    const promise = fetch(url).then((r) => {
+      if (!r.ok) throw new Error(r.status);
+      return r.json();
+    });
+    promise.catch(() => chunks.delete(n));
+    chunks.set(n, promise);
+  }
+  return chunks.get(n).then((rows) => rows[index % ds.meta.detailsChunk]);
+}
+
 export async function showOccurrencePopup(app, index) {
   const ds = app.ds;
   const s = ds.species[index];
@@ -29,6 +47,7 @@ export async function showOccurrencePopup(app, index) {
         <dt>Accuracy</dt><dd>${unc === ds.meta.unknownUncertainty ? 'not stated' : `± ${unc.toLocaleString('en')} m`}</dd>
         <dt>Position</dt><dd>${lat.toFixed(5)}, ${lon.toFixed(5)}</dd>
         <dt>Country</dt><dd>${esc(ds.countryNames[ds.country[index]])}</dd>
+        <dt>Type</dt><dd>${BASIS_LABELS[ds.meta.basis[ds.basis[index]]] || 'Observation'}</dd>
       </dl>
       <dl class="occ-meta" data-extra></dl>
       <div class="btn-row">
@@ -59,22 +78,18 @@ export async function showOccurrencePopup(app, index) {
     .addTo(app.map.map);
 
   try {
-    const res = await fetch(`/api/occurrence/${index}`);
-    if (!res.ok) return;
-    const d = await res.json();
+    const [key, locality, recordedBy, dataset, image] = await loadDetails(ds, index);
     const rows = [
-      ['Locality', d.l],
-      // Some datasets publish opaque numeric IDs instead of names.
-      ['Recorded by', /^-?\d+$/.test(d.r || '') ? '' : d.r],
-      ['Source', d.ds],
-      ['Type', BASIS_LABELS[d.b] || d.b],
+      ['Locality', locality],
+      ['Recorded by', recordedBy],
+      ['Source', dataset],
     ].filter(([, v]) => v);
     root.querySelector('[data-extra]').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
     const gbif = root.querySelector('[data-gbif]');
-    gbif.href = `https://www.gbif.org/occurrence/${encodeURIComponent(d.k)}`;
+    gbif.href = `https://www.gbif.org/occurrence/${encodeURIComponent(key)}`;
     gbif.hidden = false;
     // iNaturalist links point at multi-megabyte originals; the medium size is plenty here.
-    const photo = safeUrl(d.i)?.replace(/\/original\.(jpe?g|png)$/i, '/medium.$1');
+    const photo = safeUrl(image)?.replace(/\/original\.(jpe?g|png)$/i, '/medium.$1');
     if (photo) {
       const img = root.querySelector('.occ-photo');
       img.addEventListener('load', () => (img.hidden = false));
