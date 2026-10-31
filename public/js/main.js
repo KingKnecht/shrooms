@@ -27,6 +27,7 @@ class App {
       onClick: (info) => this.onPointClick(info),
       getTooltip: (info) => this.tooltip(info),
       onViewChange: () => this.scheduleStats(),
+      onZoom: () => this.mode === 'points' && this.render(),
     });
 
     this.sheet = setupSheet($('#panel'));
@@ -38,13 +39,18 @@ class App {
     this.setupTools();
 
     this.scheduleStats = debounce(() => this.updateStats(), 120);
-    this.refreshWeights = debounce(() => {
+    // After a date-range change: levels of detail (points mode) or weights (heatmap) are
+    // recomputed once dragging pauses; meanwhile the GPU date filter hides points instantly.
+    this.refreshDateDependent = debounce(() => {
       if (this.mode === 'heatmap') {
         this.engine.updateWeights(this.state);
         this.rebuildHeat();
-        this.render();
+      } else {
+        this.engine.updateLod(this.state);
+        this.rebuildPoints();
       }
-    }, 60);
+      this.render();
+    }, 80);
 
     this.computeColors();
     this.applyFilters();
@@ -154,7 +160,7 @@ class App {
   applyDateRange() {
     this.render();
     this.filtersUI.sync();
-    this.refreshWeights();
+    this.refreshDateDependent();
     this.scheduleStats();
   }
 
@@ -164,6 +170,10 @@ class App {
     if (mode === 'heatmap') {
       this.engine.updateWeights(this.state);
       this.rebuildHeat();
+    } else {
+      // Date changes in heatmap mode only updated the weights.
+      this.engine.updateLod(this.state);
+      this.rebuildPoints();
     }
     document.querySelectorAll('#mode-toggle button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
     this.map.popup?.remove();
@@ -208,15 +218,16 @@ class App {
     history.replaceState(history.state, '', `#${params.toString().replaceAll('%2F', '/').replaceAll('%3A', ':')}`);
   }
 
-  readTaxonFromUrl() {
-    const value = new URLSearchParams(location.hash.slice(1)).get('taxon');
+  // `params` is the URL hash as it was on arrival (MapLibre adds its own `map=` right away).
+  readTaxonFromUrl(params) {
+    const value = params.get('taxon');
     const [rank, key] = (value || '').split(':');
     const table = ['species', 'genus', 'family', 'order'].includes(rank) && this.ds.taxonTable(rank);
     const idx = table ? table.key.indexOf(Number(key)) : -1;
-    if (idx >= 0) this.selectTaxon({ rank, idx }, { fly: !new URLSearchParams(location.hash.slice(1)).has('map') });
+    if (idx >= 0) this.selectTaxon({ rank, idx }, { fly: !params.has('map') });
   }
 
-  fitBbox([w, s, e, n]) {
+  fitBbox([w, s, e, n], { animate = true } = {}) {
     const pad = Math.min(80, Math.round(window.innerWidth * 0.08));
     const desktop = window.innerWidth > 760;
     this.map.map.fitBounds(
@@ -227,7 +238,7 @@ class App {
       {
         padding: { top: pad + 40, bottom: desktop ? pad : Math.round(window.innerHeight * 0.5), left: desktop ? 410 : pad, right: pad },
         maxZoom: 11,
-        duration: 900,
+        duration: animate ? 900 : 0,
       },
     );
   }
@@ -374,8 +385,13 @@ async function main() {
     });
     text.textContent = t('loading.preparing', { n: fmt(ds.count) });
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r)));
-    window.app = new App(ds);
-    window.app.readTaxonFromUrl();
+    const arrivalParams = new URLSearchParams(location.hash.slice(1));
+    const app = new App(ds);
+    window.app = app;
+    // A shared link's map position wins over the preset country's extent.
+    const country = app.state.country;
+    if (country >= 0 && !arrivalParams.has('map')) app.filtersUI.zoomToCountry(country, { animate: false });
+    app.readTaxonFromUrl(arrivalParams);
     $('#loading').classList.add('done');
   } catch (err) {
     console.error(err);

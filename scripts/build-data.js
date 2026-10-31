@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Turns data/raw/*.ndjson (from fetch-data.js) into the files the server ships:
+// Turns data/raw/*.ndjson (GBIF, from fetch-data.js) and data/raw-inat/*.ndjson (iNaturalist
+// observations that aren't research grade, from fetch-inat.js) into the files the server ships:
 //   data/build/points.bin      columnar binary point data (positions, species, date, …)
 //   data/build/meta.json       taxonomy tables, column layout, countries, enrichment
-//   data/build/details/N.json  per-point extras (GBIF key, locality, recorder, dataset, photo)
+//   data/build/details/N.json  per-point extras (GBIF key or iNaturalist id, locality, recorder, dataset, photo)
 //                              as arrays, DETAILS_CHUNK points per file, so any static host can serve them
 // plus .br/.gz precompressed variants of points.bin and meta.json.
 //
@@ -13,9 +14,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { gridXY, mortonKey } from '../public/js/lod.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const RAW_DIR = path.join(ROOT, 'data', 'raw');
+const RAW_DIRS = [path.join(ROOT, 'data', 'raw'), path.join(ROOT, 'data', 'raw-inat')];
 const OUT_DIR = path.join(ROOT, 'data', 'build');
 const CACHE_DIR = path.join(ROOT, 'data', 'cache');
 const WIKIDATA_CACHE = path.join(CACHE_DIR, 'wikidata.json');
@@ -26,6 +28,9 @@ const EPOCH = Date.UTC(1900, 0, 1);
 const DAY_MS = 86_400_000;
 const UNKNOWN_UNCERTAINTY = 65535;
 const BASIS = ['HUMAN_OBSERVATION', 'PRESERVED_SPECIMEN', 'OBSERVATION'];
+// Per-point source: GBIF, or iNaturalist "needs ID" / "casual" (identification not confirmed).
+const SOURCES = ['gbif', 'inat_needs_id', 'inat_casual'];
+const sourceOf = (r) => (r.src === 'inat' ? (r.q === 'casual' ? 2 : 1) : 0);
 const DETAILS_CHUNK = 2000;
 
 // Wikidata P789 ("edibility") values → bit flags.
@@ -129,22 +134,32 @@ function capitalize(s) {
 }
 
 async function main() {
-  const files = fs.existsSync(RAW_DIR) ? fs.readdirSync(RAW_DIR).filter((f) => f.endsWith('.ndjson')) : [];
+  // Finished downloads only; fetch-inat.js keeps in-progress pages in *.partial.ndjson.
+  const files = RAW_DIRS.filter((dir) => fs.existsSync(dir)).flatMap((dir) =>
+    fs.readdirSync(dir).filter((f) => f.endsWith('.ndjson') && !f.endsWith('.partial.ndjson')).map((f) => path.join(dir, f)),
+  );
   if (!files.length) throw new Error('No raw data found. Run `npm run fetch-data` first.');
 
-  // Load and de-duplicate.
+  // Load and de-duplicate. GBIF keys and iNaturalist ids are separate number spaces.
   const byKey = new Map();
-  for (const f of files) {
-    for (const line of fs.readFileSync(path.join(RAW_DIR, f), 'utf8').split('\n')) {
+  for (const file of files) {
+    for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
       if (!line) continue;
       const r = JSON.parse(line);
       if (Math.abs(r.la) > 90 || Math.abs(r.lo) > 180 || (r.la === 0 && r.lo === 0)) continue;
-      byKey.set(r.k, r);
+      byKey.set(`${r.src || 'gbif'}:${r.k}`, r);
     }
   }
+  // Z-order (Morton) by position: the client's level-of-detail pass relies on it, and it
+  // keeps nearby points together (better compression, local detail chunks).
   const records = [...byKey.values()];
-  records.sort((a, b) => dayNumber(a.y, a.m, a.d) - dayNumber(b.y, b.m, b.d));
-  console.log(`${records.length.toLocaleString()} unique records from ${files.length} countries`);
+  for (const r of records) r.z = mortonKey(...gridXY(r.lo, r.la));
+  records.sort((a, b) => a.z - b.z);
+  const perSource = SOURCES.map((_, i) => records.filter((r) => sourceOf(r) === i).length);
+  console.log(
+    `${records.length.toLocaleString()} unique records from ${files.length} files ` +
+      `(${SOURCES.map((name, i) => `${name}: ${perSource[i].toLocaleString()}`).join(', ')})`,
+  );
 
   // Taxonomy tables (class → order → family → genus → species).
   const tables = { classes: new Map(), orders: new Map(), families: new Map(), genera: new Map(), species: new Map() };
@@ -185,6 +200,7 @@ async function main() {
     { name: 'month', type: 'Uint8', size: 1 },
     { name: 'country', type: countries.length < 256 ? 'Uint8' : 'Uint16', size: 1 },
     { name: 'basis', type: 'Uint8', size: 1 },
+    { name: 'source', type: 'Uint8', size: 1 },
   ];
   const BYTES = { Float32: 4, Uint32: 4, Uint16: 2, Uint8: 1 };
   let offset = 0;
@@ -218,6 +234,7 @@ async function main() {
     view.month[i] = r.m || 0;
     view.country[i] = countryIdx.get(r.c || 'XX');
     view.basis[i] = Math.max(0, BASIS.indexOf(r.b));
+    view.source[i] = sourceOf(r);
 
     // Date, accuracy and record type already live in points.bin. Some datasets publish
     // opaque numeric IDs instead of recorder names; those are dropped.
@@ -240,7 +257,7 @@ async function main() {
   const meta = {
     version: 1,
     generated: new Date().toISOString(),
-    source: 'GBIF.org occurrence search API (random sample per country)',
+    source: 'GBIF.org occurrence search API (random sample per country) and iNaturalist API (needs ID / casual)',
     count: n,
     epoch: '1900-01-01',
     minDay,
@@ -250,6 +267,8 @@ async function main() {
     detailsChunk: DETAILS_CHUNK,
     columns,
     basis: BASIS,
+    sources: SOURCES,
+    spatialOrder: 'morton',
     countries,
     classes: table(tables.classes),
     orders: table(tables.orders),

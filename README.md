@@ -2,13 +2,16 @@
 
 A fast, mobile-friendly map of about half a million mushroom observations from
 [GBIF](https://www.gbif.org), built to help with foraging: where, when and what grows.
+For Germany it also includes iNaturalist observations that aren't research grade, which adds about 170k unconfirmed records.
 
 **Live site:** https://kingknecht.github.io/shrooms/ ([source](https://github.com/KingKnecht/shrooms))
 
-- **WebGL rendering** of every point with deck.gl on top of MapLibre. Point and heatmap modes.
+- **WebGL rendering** with deck.gl on top of MapLibre. Point and heatmap modes.
+  Zoomed out, a screen-space level of detail draws one point per ~2 px cell, instead of hundreds of thousands stacked on top of each other.
 - **Filters**: edibility (from Wikidata), season (months), years, type (fungal order),
-  country, location accuracy, and herbarium specimens on or off. The year filter runs on the GPU.
+  country, location accuracy, source, and herbarium specimens on or off. The year filter runs on the GPU.
   The other filters are folded into one per-point mask that is uploaded to the GPU.
+  The country filter starts on the browser locale's country (e.g. `de-DE` → Germany) and remembers later choices.
 - **Search** across species, genera, families and orders, by scientific name or by English or German common name.
 - **Species details**: photo, edibility, regional seasonality chart (for the current map view),
   identification traits (Wikidata mycomorphbox), Wikipedia summary, classification, top countries, and links.
@@ -36,6 +39,7 @@ To build a fresh dataset:
 
 ```sh
 npm run fetch-data   # downloads ~500k records from the GBIF API (10–20 min, resumable)
+npm run fetch-inat   # optional: iNaturalist observations without research grade, Germany by default (~30 min)
 npm run build-data   # compacts them into binary columns and enriches species from Wikidata
 ```
 
@@ -65,6 +69,18 @@ UI texts live in [public/js/i18n.js](public/js/i18n.js). Copy the `de` dictionar
 Species common names are only in the dataset for English and German. Other languages use English names,
 but species details still fetch Wikipedia text and trait labels in that language when they exist.
 
+## iNaturalist observations that aren't research grade
+
+Research-grade iNaturalist observations already reach the map through GBIF. `fetch-inat` adds the rest:
+"needs ID" and "casual" observations for one place. It keeps only species-level identifications with
+coordinates and a date, from 1990 onwards, and skips captive or cultivated ones. Their names are matched
+to the GBIF taxonomy, so they share the species tables with the GBIF data. In the app they can be toggled
+with the **Source** filter, and their popups say the identification is unconfirmed.
+
+Options: `--place 7207` (an iNaturalist place id; 7207 is Germany), `--country DE` (the country code the
+records are filed under), `--from-year 1990`. The download goes at about one request per second, as
+iNaturalist asks, and resumes where it left off if interrupted.
+
 ## How the data is sampled
 
 The dataset covers mushroom-forming fungi (classes Agaricomycetes, Pezizomycetes, Tremellomycetes and
@@ -81,6 +97,7 @@ species-level identification are dropped.
 
 ```
 scripts/fetch-data.js   GBIF download → data/raw/*.ndjson
+scripts/fetch-inat.js   iNaturalist (needs ID / casual) download → data/raw-inat/*.ndjson
 scripts/build-data.js   → data/build/{points.bin(.gz/.br), meta.json(.gz/.br), details/N.json}
 scripts/export-static.js → dist/ (static site for GitHub Pages)
 server/index.js         static files, precompressed data, data/manifest.json, /api/species/:key
@@ -92,6 +109,11 @@ public/js/species-info.js  species info from GBIF, iNaturalist, Wikipedia and Wi
 `points.bin` holds one typed-array column per field: positions (Float32 lon/lat), species
 index, day number, month, coordinate uncertainty, country and record type. The client
 wraps these columns without copying them and passes them to deck.gl as binary attributes.
+
+Points are stored in Z-order (Morton order). That lets [public/js/lod.js](public/js/lod.js) assign each
+point the coarsest zoom at which it represents its grid cell, in one linear pass per zoom level.
+This is recomputed from the points that pass the current filters, so filtering never leaves a cell empty.
+Zooming only changes a GPU filter uniform.
 
 ## Data credits
 
