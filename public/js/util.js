@@ -1,4 +1,6 @@
-const numberFormat = new Intl.NumberFormat('en');
+import { lang } from './i18n.js';
+
+const numberFormat = new Intl.NumberFormat(lang);
 
 export const fmt = (n) => numberFormat.format(n);
 

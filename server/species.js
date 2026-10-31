@@ -1,5 +1,5 @@
 // Server-side species info: the shared fetcher from public/js/species-info.js plus an
-// in-memory and on-disk cache (data/cache/species/<key>.json), so each species hits
+// in-memory and on-disk cache (data/cache/species/<key>.<lang>.json), so each species hits
 // the upstream APIs at most once.
 
 import fs from 'node:fs';
@@ -9,7 +9,7 @@ import { fetchSpeciesInfo, setRequestHeaders } from '../public/js/species-info.j
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE_DIR = path.join(ROOT, 'data', 'cache', 'species');
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 setRequestHeaders({ 'User-Agent': 'shrooms-map/1.0 (mushroom occurrence map)' });
 
@@ -17,7 +17,7 @@ const memory = new Map();
 const inflight = new Map();
 
 export async function getSpeciesInfo(species) {
-  const id = String(species.key);
+  const id = `${species.key}.${species.lang}`;
   if (memory.has(id)) return memory.get(id);
 
   const file = path.join(CACHE_DIR, `${id}.json`);

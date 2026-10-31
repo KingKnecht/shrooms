@@ -11,17 +11,14 @@ const raster = (tiles, attribution, maxzoom = 19) => ({
 export const BASEMAPS = [
   {
     id: 'dark',
-    label: 'Dark',
     style: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
   },
   {
     id: 'light',
-    label: 'Light',
     style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
   },
   {
     id: 'topo',
-    label: 'Topographic (forests, terrain)',
     style: raster(
       ['a', 'b', 'c'].map((s) => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`),
       'Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, SRTM | Style © <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
@@ -30,7 +27,6 @@ export const BASEMAPS = [
   },
   {
     id: 'satellite',
-    label: 'Satellite',
     style: raster(
       ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
       'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community',

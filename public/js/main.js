@@ -8,6 +8,7 @@ import { Legend } from './legend.js';
 import { showOccurrencePopup } from './popup.js';
 import { setupSheet } from './sheet.js';
 import { fmt, esc, debounce } from './util.js';
+import { lang, t, LANGUAGES, setLanguage, translateDocument } from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -49,7 +50,10 @@ class App {
     this.applyFilters();
 
     const stamp = new Date(ds.meta.generated);
-    $('#data-stamp').textContent = `Snapshot ${stamp.toLocaleDateString('en', { month: 'short', year: 'numeric' })}, ${fmt(ds.count)} records.`;
+    $('#data-stamp').textContent = t('footer.snapshot', {
+      date: stamp.toLocaleDateString(lang, { month: 'short', year: 'numeric' }),
+      n: fmt(ds.count),
+    });
   }
 
   // ---- Rendering ----
@@ -107,9 +111,9 @@ class App {
       const span = Math.max(1, ds.maxDay - ds.minDay);
       const steps = AGE_RAMP.length - 1;
       for (let i = 0; i < ds.count; i++) {
-        const t = ((ds.day[i] - ds.minDay) / span) * steps;
-        const k = Math.min(steps - 1, Math.floor(t));
-        const f = t - k;
+        const pos = ((ds.day[i] - ds.minDay) / span) * steps;
+        const k = Math.min(steps - 1, Math.floor(pos));
+        const f = pos - k;
         const a = AGE_RAMP[k];
         const b = AGE_RAMP[k + 1];
         out[i * 4] = a[0] + (b[0] - a[0]) * f;
@@ -198,8 +202,8 @@ class App {
   // The URL hash carries the selected taxon next to MapLibre's own `map=` parameter.
   writeTaxonToUrl() {
     const params = new URLSearchParams(location.hash.slice(1));
-    const t = this.state.taxon;
-    if (t) params.set('taxon', `${t.rank}:${this.ds.taxonTable(t.rank).key[t.idx]}`);
+    const taxon = this.state.taxon;
+    if (taxon) params.set('taxon', `${taxon.rank}:${this.ds.taxonTable(taxon.rank).key[taxon.idx]}`);
     else params.delete('taxon');
     history.replaceState(history.state, '', `#${params.toString().replaceAll('%2F', '/').replaceAll('%3A', ':')}`);
   }
@@ -233,9 +237,7 @@ class App {
   updateStats() {
     const stats = this.engine.stats(this.state, this.map.bounds());
     this.lastStats = stats;
-    $('#summary').innerHTML =
-      `<strong>${fmt(stats.total)}</strong> of ${fmt(this.ds.count)} records match` +
-      ` · <strong>${fmt(stats.inView)}</strong> in view`;
+    $('#summary').innerHTML = t('summary', { total: fmt(stats.total), all: fmt(this.ds.count), inView: fmt(stats.inView) });
     this.speciesUI.renderList(stats);
     this.speciesUI.refreshInView();
   }
@@ -268,34 +270,35 @@ class App {
   formatDay(day, month) {
     const d = new Date(Date.UTC(1900, 0, 1) + day * 86_400_000);
     if (!month) return String(d.getUTCFullYear());
-    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    return d.toLocaleDateString(lang === 'en' ? 'en-GB' : lang, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
   }
 
   // ---- Chrome ----
 
   renderActiveTaxon() {
     const el = $('#active-taxon');
-    const t = this.state.taxon;
-    if (!t) {
+    const taxon = this.state.taxon;
+    if (!taxon) {
       el.hidden = true;
       return;
     }
     const ds = this.ds;
+    const { rank, idx } = taxon;
     const label =
-      t.rank === 'species'
-        ? ds.commonName(t.idx)
-          ? `${esc(ds.commonName(t.idx))} <i class="muted">${esc(ds.speciesName(t.idx))}</i>`
-          : `<i>${esc(ds.speciesName(t.idx))}</i>`
-        : esc(ds.taxonName(t.rank, t.idx));
-    el.innerHTML = `<span class="t-label"><span class="t-rank">${t.rank}</span>${label}</span>
-      <button type="button" data-act="info">Info</button>
-      <button type="button" data-act="clear" aria-label="Clear taxon filter">✕</button>`;
+      rank === 'species'
+        ? ds.commonName(idx)
+          ? `${esc(ds.commonName(idx))} <i class="muted">${esc(ds.speciesName(idx))}</i>`
+          : `<i>${esc(ds.speciesName(idx))}</i>`
+        : esc(ds.taxonName(rank, idx));
+    el.innerHTML = `<span class="t-label"><span class="t-rank">${esc(t(`rank.${rank}`))}</span>${label}</span>
+      <button type="button" data-act="info">${esc(t('taxon.info'))}</button>
+      <button type="button" data-act="clear" aria-label="${esc(t('taxon.clear'))}">✕</button>`;
     el.hidden = false;
     el.onclick = (e) => {
       const act = e.target.closest('button')?.dataset.act;
       if (act === 'clear') this.selectTaxon(null);
       if (act === 'info') {
-        this.speciesUI.showTaxon(t);
+        this.speciesUI.showTaxon(taxon);
         this.showTab('species');
       }
     };
@@ -334,7 +337,7 @@ class App {
 
   renderToolOptions() {
     $('#basemap-options').innerHTML = BASEMAPS.map(
-      (b) => `<button role="radio" data-basemap="${b.id}" aria-checked="${b.id === this.map.basemap}">${b.label}</button>`,
+      (b) => `<button role="radio" data-basemap="${b.id}" aria-checked="${b.id === this.map.basemap}">${esc(t(`basemap.${b.id}`))}</button>`,
     ).join('');
     $('#basemap-options').onclick = (e) => {
       const id = e.target.closest('button')?.dataset.basemap;
@@ -343,37 +346,40 @@ class App {
         this.renderToolOptions();
       }
     };
-    const modes = [
-      ['edibility', 'Edibility'],
-      ['group', 'Type (order)'],
-      ['year', 'Year observed'],
-    ];
-    $('#color-options').innerHTML = modes
-      .map(([id, label]) => `<button role="radio" data-color="${id}" aria-checked="${id === this.colorMode}">${label}</button>`)
+    $('#color-options').innerHTML = ['edibility', 'group', 'year']
+      .map((id) => `<button role="radio" data-color="${id}" aria-checked="${id === this.colorMode}">${esc(t(`color.${id}`))}</button>`)
       .join('');
     $('#color-options').onclick = (e) => {
       const id = e.target.closest('button')?.dataset.color;
       if (id && id !== this.colorMode) this.setColorMode(id);
     };
+    $('#language-options').innerHTML = LANGUAGES.map(
+      ([id, name]) => `<button role="radio" data-lang="${id}" lang="${id}" aria-checked="${id === lang}">${esc(name)}</button>`,
+    ).join('');
+    $('#language-options').onclick = (e) => {
+      const id = e.target.closest('button')?.dataset.lang;
+      if (id) setLanguage(id);
+    };
   }
 }
 
 async function main() {
+  translateDocument();
   const bar = $('#loading-bar');
   const text = $('#loading-text');
   try {
     const ds = await loadDataset((p) => {
       bar.style.width = `${Math.round(p * 100)}%`;
-      text.textContent = `Loading occurrences… ${Math.round(p * 100)}%`;
+      text.textContent = t('loading.progress', { p: Math.round(p * 100) });
     });
-    text.textContent = `Preparing ${fmt(ds.count)} points…`;
+    text.textContent = t('loading.preparing', { n: fmt(ds.count) });
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r)));
     window.app = new App(ds);
     window.app.readTaxonFromUrl();
     $('#loading').classList.add('done');
   } catch (err) {
     console.error(err);
-    text.textContent = `Could not load the data: ${err.message}`;
+    text.textContent = t('loading.error', { message: err.message });
   }
 }
 

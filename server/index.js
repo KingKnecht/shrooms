@@ -111,10 +111,13 @@ async function handle(req, res) {
   if ((m = pathname.match(/^\/api\/species\/(\d+)$/))) {
     const idx = speciesByKey.get(m[1]);
     if (idx === undefined) return sendJson(req, res, 404, { error: 'Unknown species' });
+    const lang = url.searchParams.get('lang') || 'en';
+    if (!/^[a-z]{2}$/.test(lang)) return sendJson(req, res, 400, { error: 'Invalid language' });
     const info = await getSpeciesInfo({
       key: meta.species.key[idx],
       name: meta.species.name[idx],
       wiki: meta.species.wiki[idx],
+      lang,
     });
     return sendJson(req, res, 200, info, 86400);
   }

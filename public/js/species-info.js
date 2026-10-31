@@ -2,16 +2,9 @@
 // Shared by the browser (static hosting) and the Node server (which adds a disk cache).
 // All four APIs allow cross-origin requests.
 
-// Wikidata "mycomorphbox" properties.
-const TRAITS = {
-  P783: 'Hymenium type',
-  P784: 'Cap shape',
-  P785: 'Hymenium attachment',
-  P786: 'Stipe',
-  P787: 'Spore print',
-  P788: 'Ecology',
-  P789: 'Edibility',
-};
+// Wikidata "mycomorphbox" properties: hymenium type, cap shape, hymenium attachment,
+// stipe, spore print, ecology, edibility. Results are keyed by property ID; the UI names them.
+const TRAITS = ['P783', 'P784', 'P785', 'P786', 'P787', 'P788', 'P789'];
 
 // Extra request headers. Node sets a User-Agent; browsers send none, because a custom
 // header would trigger CORS preflights that not every API answers.
@@ -54,10 +47,9 @@ async function gbif(key) {
   };
 }
 
-async function inaturalist(name) {
-  const data = await getJson(
-    `https://api.inaturalist.org/v1/taxa?${new URLSearchParams({ q: name, rank: 'species,subspecies,variety', per_page: '10' })}`,
-  );
+async function inaturalist(name, lang) {
+  const params = new URLSearchParams({ q: name, rank: 'species,subspecies,variety', per_page: '10', locale: lang });
+  const data = await getJson(`https://api.inaturalist.org/v1/taxa?${params}`);
   const taxon = (data.results || []).find((t) => t.name?.toLowerCase() === name.toLowerCase());
   if (!taxon) return null;
   const photo = taxon.default_photo;
@@ -73,10 +65,11 @@ async function inaturalist(name) {
   };
 }
 
-async function wikipedia(title) {
-  const data = await getJson(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
+async function wikipedia(title, lang = 'en') {
+  const data = await getJson(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
   if (data.type === 'disambiguation' || !data.extract) return null;
   return {
+    lang,
     title: data.title,
     extract: data.extract,
     url: data.content_urls?.desktop?.page,
@@ -84,43 +77,59 @@ async function wikipedia(title) {
   };
 }
 
-async function wikidataTraits(key) {
+// Traits (labelled in `lang`, falling back to English) and the title of the
+// species' Wikipedia article in `lang`, from one Wikidata query.
+async function wikidata(key, lang) {
   const query = `
-    SELECT ?prop ?valLabel WHERE {
+    SELECT ?prop ?valLabel ?article WHERE {
       ?item wdt:P846 "${key}" .
-      VALUES ?prop { ${Object.keys(TRAITS).map((p) => `wdt:${p}`).join(' ')} }
-      ?item ?prop ?val .
-      SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+      OPTIONAL {
+        VALUES ?prop { ${TRAITS.map((p) => `wdt:${p}`).join(' ')} }
+        ?item ?prop ?val .
+      }
+      OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://${lang}.wikipedia.org/> }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "${lang},en". }
     }`;
   const data = await getJson(`https://query.wikidata.org/sparql?${new URLSearchParams({ query })}`, {
     headers: { Accept: 'application/sparql-results+json' },
   });
   const traits = {};
+  let article = null;
   for (const b of data.results.bindings) {
-    const label = TRAITS[b.prop.value.split('/').pop()];
+    if (b.article) article = decodeURIComponent(b.article.value.split('/wiki/')[1]);
+    const prop = b.prop?.value.split('/').pop();
     const value = b.valLabel?.value;
-    if (!label || !value || /^Q\d+$/.test(value)) continue;
+    if (!prop || !value || /^Q\d+$/.test(value)) continue;
     // "flat mushroom cap" → "flat", "free hymenium attachment" → "free", …
-    (traits[label] ||= []).push(value.replace(/ (mushroom cap|hymenium attachment|stipe|mushroom)$/, ''));
+    const clean = value.replace(/ (mushroom cap|hymenium attachment|stipe|mushroom)$/, '');
+    if (!(traits[prop] ||= []).includes(clean)) traits[prop].push(clean);
   }
-  return traits;
+  return { traits, article };
 }
 
-export async function fetchSpeciesInfo({ key, name, wiki }) {
-  const settled = await Promise.allSettled([gbif(key), inaturalist(name), wikidataTraits(key)]);
-  const [g, inat, traits] = settled.map((s) => (s.status === 'fulfilled' ? s.value : null));
+export async function fetchSpeciesInfo({ key, name, wiki, lang = 'en' }) {
+  const settled = await Promise.allSettled([gbif(key), inaturalist(name, lang), wikidata(key, lang)]);
+  const [g, inat, wd] = settled.map((s) => (s.status === 'fulfilled' ? s.value : null));
 
-  const wikiTitle = wiki || inat?.wikipediaUrl?.split('/wiki/')[1] || name;
-  const wp = await wikipedia(decodeURIComponent(wikiTitle)).catch(() => null);
+  // Wikipedia in the UI language when an article exists, otherwise English.
+  let wp = null;
+  if (lang !== 'en' && wd?.article) wp = await wikipedia(wd.article, lang).catch(() => null);
+  if (!wp) {
+    // iNaturalist's link follows the requested locale, so only use it when it is English.
+    const inatTitle = /\/\/en\.wikipedia\.org\/wiki\//.test(inat?.wikipediaUrl || '') ? inat.wikipediaUrl.split('/wiki/')[1] : null;
+    const enTitle = wiki || inatTitle || name;
+    wp = await wikipedia(decodeURIComponent(enTitle)).catch(() => null);
+  }
 
   return {
     key,
     name,
+    lang,
     fetched: new Date().toISOString(),
     gbif: g,
     inaturalist: inat,
     wikipedia: wp,
-    traits: traits || {},
+    traits: wd?.traits || {},
     // False when a core source failed, so callers can avoid caching a partial result.
     complete: Boolean(g) && settled[1].status === 'fulfilled',
   };

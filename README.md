@@ -15,6 +15,8 @@ A fast, mobile-friendly map of about half a million mushroom observations from
 - **In view**: the species with the most records in the current map view.
 - Click a point to see the record's date, accuracy, locality, recorder and photo, with a directions link.
 - Base maps: dark, light, topographic (OpenTopoMap, shows forests and terrain) and satellite.
+- **English and German UI**, picked from the browser language and switchable in the map-style menu (layers button, top right).
+  In German, species show their German common names, and Wikipedia text and identification traits are in German where available.
 
 > Never eat a wild mushroom based on a map, an app or a photo. Edibility data comes from
 > Wikidata and is incomplete; most species are shown as *unknown*.
@@ -55,6 +57,13 @@ To update the data shown online, run `fetch-data` and `build-data`, then commit 
 
 To check the export locally, serve `dist/` with any static file server, for example
 `npx serve dist` or `python3 -m http.server -d dist`.
+
+## Adding a language
+
+UI texts live in [public/js/i18n.js](public/js/i18n.js). Copy the `de` dictionary, translate it, and add it to
+`DICTS` and `LANGUAGES`. Missing keys fall back to English. Month and country names come from the browser (`Intl`).
+Species common names are only in the dataset for English and German. Other languages use English names,
+but species details still fetch Wikipedia text and trait labels in that language when they exist.
 
 ## How the data is sampled
 
