@@ -97,6 +97,8 @@ export class Dataset {
     this.month = cols.month;
     this.country = cols.country;
     this.basis = cols.basis;
+    // 0 GBIF, 1 iNaturalist needs ID, 2 iNaturalist casual (older builds have no such column).
+    this.source = cols.source || new Uint8Array(meta.count);
 
     const sp = meta.species;
     this.nSpecies = sp.key.length;

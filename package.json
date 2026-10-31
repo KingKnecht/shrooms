@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "fetch-data": "node scripts/fetch-data.js",
+    "fetch-inat": "node scripts/fetch-inat.js",
     "build-data": "node scripts/build-data.js",
     "export": "node scripts/export-static.js",
     "start": "node server/index.js"

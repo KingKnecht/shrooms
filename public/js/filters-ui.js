@@ -5,12 +5,40 @@ import { esc, fmt, rgb } from './util.js';
 
 const $ = (sel) => document.querySelector(sel);
 
+const SOURCE_COLORS = [[120, 170, 220], [240, 190, 80], [205, 150, 215]];
+
 const SEASONS = [
   ['preset.spring', [3, 4, 5]],
   ['preset.summer', [6, 7, 8]],
   ['preset.autumn', [9, 10, 11]],
   ['preset.winter', [12, 1, 2]],
 ];
+
+const COUNTRY_KEY = 'shrooms.country';
+
+// The country the filter starts on: the last choice ('all' or an ISO code), otherwise the
+// region of the browser's preferred language ("de" → "de-Latn-DE" → DE).
+function preferredCountry() {
+  try {
+    const saved = localStorage.getItem(COUNTRY_KEY);
+    if (saved) return saved === 'all' ? null : saved;
+  } catch {
+    // Storage blocked: fall back to the locale.
+  }
+  try {
+    return new Intl.Locale(navigator.languages?.[0] || navigator.language).maximize().region || null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberCountry(code) {
+  try {
+    localStorage.setItem(COUNTRY_KEY, code || 'all');
+  } catch {
+    // Not persisted; the choice still applies to this visit.
+  }
+}
 
 // Toggle helper for multi-select chips: the first click on a fully-selected set
 // isolates the clicked item, and deselecting the last item selects everything again.
@@ -32,6 +60,8 @@ export class FiltersUI {
     this.buildYears();
     this.buildGroups();
     this.buildSelects();
+    this.buildSources();
+    this.presetCountry();
 
     document.querySelectorAll('[data-reset]').forEach((btn) =>
       btn.addEventListener('click', () => {
@@ -39,6 +69,7 @@ export class FiltersUI {
         if (btn.dataset.reset === 'categories') s.categories.fill(true);
         if (btn.dataset.reset === 'months') s.months.fill(true);
         if (btn.dataset.reset === 'groups') s.groups = null;
+        if (btn.dataset.reset === 'sources') s.sources.fill(true);
         this.app.applyFilters();
       }),
     );
@@ -51,8 +82,10 @@ export class FiltersUI {
     s.months.fill(true);
     s.groups = null;
     s.country = -1;
+    rememberCountry(null);
     s.maxUncertainty = Infinity;
     s.includeSpecimens = true;
+    s.sources.fill(true);
     s.dayRange = [this.ds.minDay, this.ds.maxDay];
     this.syncYears();
     this.app.selectTaxon(null);
@@ -236,6 +269,7 @@ export class FiltersUI {
     sel.insertAdjacentHTML('beforeend', options.map((c) => `<option value="${c.i}">${esc(c.name)} (${fmt(c.n)})</option>`).join(''));
     sel.addEventListener('change', () => {
       this.app.state.country = Number(sel.value);
+      rememberCountry(ds.meta.countries[this.app.state.country]);
       this.app.applyFilters();
       if (this.app.state.country >= 0) this.zoomToCountry(this.app.state.country);
     });
@@ -257,7 +291,42 @@ export class FiltersUI {
     });
   }
 
-  zoomToCountry(c) {
+  // ---- Source (GBIF vs. unconfirmed iNaturalist observations) ----
+
+  buildSources() {
+    const ds = this.ds;
+    const counts = [0, 0, 0];
+    for (let i = 0; i < ds.count; i++) counts[ds.source[i]]++;
+    // Only worth showing when the dataset includes iNaturalist data.
+    if (!counts[1] && !counts[2]) return;
+    $('#source-field').hidden = false;
+    const ids = [0, 1, 2].filter((id) => counts[id]);
+    const el = $('#filter-sources');
+    el.innerHTML = ids
+      .map(
+        (id) => `<button class="chip" data-source="${id}" aria-pressed="true" title="${esc(t('filter.recordsTitle', { n: fmt(counts[id]) }))}">
+          <span class="dot" style="background:${rgb(SOURCE_COLORS[id])}"></span>${esc(t(`source.${id}`))}</button>`,
+      )
+      .join('');
+    el.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-source]');
+      if (!btn) return;
+      const s = this.app.state;
+      const selected = new Set(ids.filter((id) => s.sources[id]));
+      const next = toggleInSet(ids, selected, Number(btn.dataset.source));
+      ids.forEach((id) => (s.sources[id] = next.has(id)));
+      this.app.applyFilters();
+    });
+  }
+
+  // Start on the user's country when the dataset has records there.
+  presetCountry() {
+    const code = preferredCountry();
+    const idx = code ? this.ds.meta.countries.indexOf(code) : -1;
+    if (idx >= 0 && $(`#filter-country option[value="${idx}"]`)) this.app.state.country = idx;
+  }
+
+  zoomToCountry(c, { animate = true } = {}) {
     // Use the 2nd–98th percentile of coordinates so overseas territories don't dominate.
     const ds = this.ds;
     const lons = [];
@@ -271,7 +340,7 @@ export class FiltersUI {
     lons.sort((a, b) => a - b);
     lats.sort((a, b) => a - b);
     const q = (arr, p) => arr[Math.min(arr.length - 1, Math.floor(p * arr.length))];
-    this.app.fitBbox([q(lons, 0.02), q(lats, 0.02), q(lons, 0.98), q(lats, 0.98)]);
+    this.app.fitBbox([q(lons, 0.02), q(lats, 0.02), q(lons, 0.98), q(lats, 0.98)], { animate });
   }
 
   // Reflect state into the controls (state can also change from the legend, reset, etc.).
@@ -288,6 +357,9 @@ export class FiltersUI {
     $('#filter-country').value = String(s.country);
     $('#filter-precision').value = String(s.maxUncertainty);
     $('#filter-specimens').checked = s.includeSpecimens;
+    document.querySelectorAll('#filter-sources [data-source]').forEach((b) =>
+      b.setAttribute('aria-pressed', String(s.sources[b.dataset.source])),
+    );
 
     const active =
       (s.categories.every(Boolean) ? 0 : 1) +
@@ -296,6 +368,7 @@ export class FiltersUI {
       (s.country >= 0 ? 1 : 0) +
       (Number.isFinite(s.maxUncertainty) ? 1 : 0) +
       (s.includeSpecimens ? 0 : 1) +
+      (s.sources.every(Boolean) ? 0 : 1) +
       (s.dayRange[0] > this.ds.minDay || s.dayRange[1] < this.ds.maxDay ? 1 : 0);
     const tab = document.querySelector('.tabs [data-tab="filters"]');
     tab.innerHTML = `${esc(t('tab.filters'))}${active ? `<span class="badge">${active}</span>` : ''}`;

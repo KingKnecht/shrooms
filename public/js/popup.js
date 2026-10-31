@@ -34,6 +34,7 @@ export async function showOccurrencePopup(app, index) {
   const common = ds.commonName(s);
   const cat = CATEGORIES[ds.speciesCategory[s]];
   const unc = ds.uncertainty[index];
+  const source = ds.source[index];
 
   const root = document.createElement('div');
   root.className = 'occ';
@@ -43,18 +44,20 @@ export async function showOccurrencePopup(app, index) {
       <p class="occ-title">${common ? esc(common) : `<i>${esc(ds.speciesName(s))}</i>`}</p>
       ${common ? `<div class="occ-sci">${esc(ds.speciesName(s))}</div>` : ''}
       <div class="occ-badge"><span class="dot" style="background:${rgb(cat.color)}"></span>${esc(t(`cat.${cat.id}`))}</div>
+      ${source ? `<p class="occ-warning">${t('popup.unconfirmed')}</p>` : ''}
       <dl class="occ-meta">
         <dt>${t('popup.date')}</dt><dd>${app.formatDay(ds.day[index], ds.month[index])}</dd>
         <dt>${t('popup.accuracy')}</dt><dd>${unc === ds.meta.unknownUncertainty ? t('popup.notStated') : `± ${fmt(unc)} m`}</dd>
         <dt>${t('popup.position')}</dt><dd>${lat.toFixed(5)}, ${lon.toFixed(5)}</dd>
         <dt>${t('popup.country')}</dt><dd>${esc(ds.countryNames[ds.country[index]])}</dd>
         <dt>${t('popup.type')}</dt><dd>${t(BASIS_LABELS[ds.meta.basis[ds.basis[index]]] || 'popup.observation')}</dd>
+        <dt>${t('popup.source')}</dt><dd>${t(`source.${source}`)}</dd>
       </dl>
       <dl class="occ-meta" data-extra></dl>
       <div class="btn-row">
         <button class="btn btn-primary" data-act="details">${t('popup.speciesInfo')}</button>
         <button class="btn" data-act="only">${t('popup.only')}</button>
-        <a class="btn" data-gbif target="_blank" rel="noopener" hidden>${t('popup.gbif')}</a>
+        <a class="btn" data-record target="_blank" rel="noopener" hidden>${t(source ? 'popup.inat' : 'popup.gbif')}</a>
         <a class="btn" target="_blank" rel="noopener"
            href="https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lon.toFixed(6)}">${t('popup.directions')}</a>
       </div>
@@ -83,12 +86,14 @@ export async function showOccurrencePopup(app, index) {
     const rows = [
       [t('popup.locality'), locality],
       [t('popup.recordedBy'), recordedBy],
-      [t('popup.source'), dataset],
+      [t('popup.dataset'), dataset],
     ].filter(([, v]) => v);
     root.querySelector('[data-extra]').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
-    const gbif = root.querySelector('[data-gbif]');
-    gbif.href = `https://www.gbif.org/occurrence/${encodeURIComponent(key)}`;
-    gbif.hidden = false;
+    const link = root.querySelector('[data-record]');
+    link.href = source
+      ? `https://www.inaturalist.org/observations/${encodeURIComponent(key)}`
+      : `https://www.gbif.org/occurrence/${encodeURIComponent(key)}`;
+    link.hidden = false;
     // iNaturalist links point at multi-megabyte originals; the medium size is plenty here.
     const photo = safeUrl(image)?.replace(/\/original\.(jpe?g|png)$/i, '/medium.$1');
     if (photo) {

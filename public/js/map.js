@@ -1,5 +1,7 @@
 // MapLibre base map with a deck.gl WebGL overlay for the occurrence points.
 
+import { maxLevelForZoom } from './lod.js';
+
 const { MapboxOverlay, ScatterplotLayer, HeatmapLayer, DataFilterExtension } = window.deck;
 
 const raster = (tiles, attribution, maxzoom = 19) => ({
@@ -45,7 +47,7 @@ const HEAT_COLORS = [
 ];
 
 export class OccurrenceMap {
-  constructor(container, { onClick, getTooltip, onViewChange }) {
+  constructor(container, { onClick, getTooltip, onViewChange, onZoom }) {
     this.basemap = BASEMAPS[0].id;
     this.map = new maplibregl.Map({
       container,
@@ -79,6 +81,13 @@ export class OccurrenceMap {
       pickingRadius: 6,
     });
     this.map.addControl(this.overlay);
+
+    // Level of detail follows the zoom; re-rendering only changes a uniform.
+    let zoomFrame = 0;
+    this.map.on('zoom', () => {
+      cancelAnimationFrame(zoomFrame);
+      zoomFrame = requestAnimationFrame(() => onZoom?.());
+    });
 
     let pending = 0;
     this.map.on('moveend', () => {
@@ -143,7 +152,7 @@ export class OccurrenceMap {
           autoHighlight: true,
           highlightColor: [255, 255, 255, 230],
           extensions: [new DataFilterExtension({ filterSize: 2 })],
-          filterRange: [s.dayRange, [0.5, 1.5]],
+          filterRange: [s.dayRange, [0, maxLevelForZoom(this.map.getZoom())]],
         }),
       );
     }

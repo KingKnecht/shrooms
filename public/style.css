@@ -553,6 +553,7 @@ select {
 .occ .btn { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
 .occ-badge { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px; color: var(--text-2); }
 .occ-badge .dot { width: 9px; height: 9px; border-radius: 50%; }
+.occ-warning { margin: 6px 0 0; padding: 5px 8px; border-radius: 7px; background: rgba(240, 190, 80, 0.14); color: #f3cf86; font-size: 12px; }
 
 .deck-tooltip {
   background: var(--surface-solid) !important;
