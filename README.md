@@ -21,16 +21,38 @@ A fast, mobile-friendly map of about half a million mushroom observations from
 
 Requires Node.js 20 or newer.
 
+The processed dataset (`data/build/`) is committed, so after cloning this is enough:
+
 ```sh
 npm install
+npm start            # http://localhost:3000
+```
+
+To build a fresh dataset:
+
+```sh
 npm run fetch-data   # downloads ~500k records from the GBIF API (10–20 min, resumable)
 npm run build-data   # compacts them into binary columns and enriches species from Wikidata
-npm start            # http://localhost:3000
 ```
 
 `fetch-data` options: `--target 500000` (number of records), `--concurrency 6`, `--from-year 1990`.
 To refetch, delete `data/raw/` (or only some `data/raw/<COUNTRY>.ndjson` files) and run it again.
 `PORT` and `HOST` environment variables configure the server.
+
+## Hosting on GitHub Pages
+
+`npm run export` writes the whole site as static files to `dist/`, so it needs no server.
+In static mode the browser fetches species info directly from GBIF, iNaturalist, Wikipedia and Wikidata.
+It also decompresses the gzipped point data itself.
+
+`.github/workflows/pages.yml` runs the export and publishes it on every push to `master`.
+To enable it once, go to the repository's **Settings → Pages** and set **Source** to **GitHub Actions**.
+The site is then served at `https://<user>.github.io/<repo>/`.
+
+To update the data shown online, run `fetch-data` and `build-data`, then commit `data/build/` and push.
+
+To check the export locally, serve `dist/` with any static file server, for example
+`npx serve dist` or `python3 -m http.server -d dist`.
 
 ## How the data is sampled
 
@@ -48,10 +70,12 @@ species-level identification are dropped.
 
 ```
 scripts/fetch-data.js   GBIF download → data/raw/*.ndjson
-scripts/build-data.js   → data/build/{points.bin, meta.json, details.ndjson, details.idx} (+ .br/.gz)
-server/index.js         static files, precompressed data, /api/occurrence/:i, /api/species/:key
-server/species.js       species info from GBIF, iNaturalist, Wikipedia and Wikidata (cached on disk)
+scripts/build-data.js   → data/build/{points.bin(.gz/.br), meta.json(.gz/.br), details/N.json}
+scripts/export-static.js → dist/ (static site for GitHub Pages)
+server/index.js         static files, precompressed data, data/manifest.json, /api/species/:key
+server/species.js       disk cache around public/js/species-info.js
 public/                 frontend (plain ES modules, no build step)
+public/js/species-info.js  species info from GBIF, iNaturalist, Wikipedia and Wikidata (browser and server)
 ```
 
 `points.bin` holds one typed-array column per field: positions (Float32 lon/lat), species

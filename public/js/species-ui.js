@@ -1,5 +1,6 @@
 import { CATEGORIES, EDIBILITY_FLAGS, GROUP_PALETTE, GROUP_OTHER, MONTH_INITIALS, MONTHS } from './data.js';
 import { esc, fmt, rgb, safeUrl } from './util.js';
+import { fetchSpeciesInfo } from './species-info.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -178,9 +179,15 @@ export class SpeciesUI {
     let info = this.infoCache.get(key);
     if (!info) {
       try {
-        const res = await fetch(`/api/species/${key}`);
-        if (!res.ok) throw new Error(res.status);
-        info = await res.json();
+        if (this.ds.manifest.speciesApi) {
+          const res = await fetch(`api/species/${key}`);
+          if (!res.ok) throw new Error(res.status);
+          info = await res.json();
+        } else {
+          // Static hosting: ask the upstream APIs directly.
+          const sp = this.ds.meta.species;
+          info = await fetchSpeciesInfo({ key, name: sp.name[s], wiki: sp.wiki[s] });
+        }
         this.infoCache.set(key, info);
       } catch {
         info = null;

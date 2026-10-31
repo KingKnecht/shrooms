@@ -2,8 +2,8 @@
 // Turns data/raw/*.ndjson (from fetch-data.js) into the files the server ships:
 //   data/build/points.bin      columnar binary point data (positions, species, date, …)
 //   data/build/meta.json       taxonomy tables, column layout, countries, enrichment
-//   data/build/details.ndjson  one JSON line per point (locality, recorder, photo, …)
-//   data/build/details.idx     Uint32 byte offsets into details.ndjson
+//   data/build/details/N.json  per-point extras (GBIF key, locality, recorder, dataset, photo)
+//                              as arrays, DETAILS_CHUNK points per file, so any static host can serve them
 // plus .br/.gz precompressed variants of points.bin and meta.json.
 //
 // Species are enriched from Wikidata (edibility, English/German common names,
@@ -26,6 +26,7 @@ const EPOCH = Date.UTC(1900, 0, 1);
 const DAY_MS = 86_400_000;
 const UNKNOWN_UNCERTAINTY = 65535;
 const BASIS = ['HUMAN_OBSERVATION', 'PRESERVED_SPECIMEN', 'OBSERVATION'];
+const DETAILS_CHUNK = 2000;
 
 // Wikidata P789 ("edibility") values → bit flags.
 const EDIBILITY_FLAGS = {
@@ -59,11 +60,6 @@ function dayNumber(y, m, d) {
   // Unknown month/day fall in the middle of the year/month.
   const t = Date.UTC(y, m ? m - 1 : 6, m ? d || 15 : 1);
   return Math.round((t - EPOCH) / DAY_MS);
-}
-
-function isoDate(y, m, d) {
-  if (!m) return String(y);
-  return `${y}-${String(m).padStart(2, '0')}${d ? `-${String(d).padStart(2, '0')}` : ''}`;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -201,14 +197,13 @@ async function main() {
     columns.map((col) => [col.name, new globalThis[`${col.type}Array`](buffer, col.offset, n * col.size)]),
   );
 
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-  const detailsPath = path.join(OUT_DIR, 'details.ndjson');
-  const detailsFd = fs.openSync(detailsPath, 'w');
-  const detailOffsets = new Uint32Array(n + 1);
+  const detailsDir = path.join(OUT_DIR, 'details');
+  fs.rmSync(detailsDir, { recursive: true, force: true });
+  fs.mkdirSync(detailsDir, { recursive: true });
   let detailBytes = 0;
   let minDay = Infinity;
   let maxDay = -Infinity;
-  const chunks = [];
+  let chunk = [];
 
   for (let i = 0; i < n; i++) {
     const r = records[i];
@@ -224,18 +219,19 @@ async function main() {
     view.country[i] = countryIdx.get(r.c || 'XX');
     view.basis[i] = Math.max(0, BASIS.indexOf(r.b));
 
-    const line = Buffer.from(
-      JSON.stringify({ k: r.k, d: isoDate(r.y, r.m, r.d), u: r.u ?? null, b: r.b, l: r.l, r: r.r, ds: r.ds, i: r.i }) + '\n',
-    );
-    detailOffsets[i] = detailBytes;
-    detailBytes += line.length;
-    chunks.push(line);
-    if (chunks.length >= 5000) fs.writeSync(detailsFd, Buffer.concat(chunks.splice(0)));
+    // Date, accuracy and record type already live in points.bin. Some datasets publish
+    // opaque numeric IDs instead of recorder names; those are dropped.
+    const recorder = /^-?\d+$/.test(r.r || '') ? null : r.r;
+    chunk.push([r.k, r.l ?? null, recorder ?? null, r.ds ?? null, r.i ?? null]);
+    if (chunk.length === DETAILS_CHUNK || i === n - 1) {
+      const json = JSON.stringify(chunk);
+      fs.writeFileSync(path.join(detailsDir, `${Math.floor(i / DETAILS_CHUNK)}.json`), json);
+      detailBytes += json.length;
+      chunk = [];
+    }
   }
-  if (chunks.length) fs.writeSync(detailsFd, Buffer.concat(chunks));
-  fs.closeSync(detailsFd);
-  detailOffsets[n] = detailBytes;
-  fs.writeFileSync(path.join(OUT_DIR, 'details.idx'), Buffer.from(detailOffsets.buffer));
+  // Remove files from the previous layout.
+  for (const old of ['details.ndjson', 'details.idx']) fs.rmSync(path.join(OUT_DIR, old), { force: true });
 
   const table = (map, extra = () => ({})) => {
     const rows = [...map.values()];
@@ -251,6 +247,7 @@ async function main() {
     maxDay,
     unknownUncertainty: UNKNOWN_UNCERTAINTY,
     byteLength: offset,
+    detailsChunk: DETAILS_CHUNK,
     columns,
     basis: BASIS,
     countries,
@@ -281,7 +278,7 @@ async function main() {
   };
   write('points.bin', Buffer.from(buffer));
   write('meta.json', Buffer.from(JSON.stringify(meta)));
-  console.log(`  details.ndjson: ${(detailBytes / 1e6).toFixed(1)} MB`);
+  console.log(`  details/: ${Math.ceil(n / DETAILS_CHUNK)} files, ${(detailBytes / 1e6).toFixed(1)} MB`);
   console.log('Build complete. Start the app with: npm start');
 }
 

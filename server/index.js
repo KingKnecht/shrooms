@@ -4,6 +4,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { getSpeciesInfo } from './species.js';
+import { VENDOR } from './vendor.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -23,15 +24,8 @@ const MIME = {
   '.bin': 'application/octet-stream',
 };
 
-// Third-party browser bundles served straight from node_modules.
-const VENDOR = {
-  'deck.gl.min.js': 'node_modules/deck.gl/dist.min.js',
-  'maplibre-gl.js': 'node_modules/maplibre-gl/dist/maplibre-gl.js',
-  'maplibre-gl.css': 'node_modules/maplibre-gl/dist/maplibre-gl.css',
-};
-
-// Precompressed dataset files produced by scripts/build-data.js.
-const DATA_FILES = new Set(['points.bin', 'meta.json']);
+// Dataset files produced by scripts/build-data.js (points.bin and meta.json have .br/.gz siblings).
+const DATA_FILE = /^(points\.bin|meta\.json|details\/\d+\.json)$/;
 
 if (!fs.existsSync(path.join(BUILD_DIR, 'meta.json'))) {
   console.error('No dataset found in data/build/. Run `npm run fetch-data` and `npm run build-data` first.');
@@ -40,10 +34,15 @@ if (!fs.existsSync(path.join(BUILD_DIR, 'meta.json'))) {
 
 const meta = JSON.parse(fs.readFileSync(path.join(BUILD_DIR, 'meta.json'), 'utf8'));
 const speciesByKey = new Map(meta.species.key.map((key, i) => [String(key), i]));
-const idxBuf = fs.readFileSync(path.join(BUILD_DIR, 'details.idx'));
-const detailOffsets = new Uint32Array(idxBuf.buffer.slice(idxBuf.byteOffset, idxBuf.byteOffset + idxBuf.length));
-const detailsFd = fs.openSync(path.join(BUILD_DIR, 'details.ndjson'), 'r');
 const dataVersion = String(Date.parse(meta.generated));
+
+// Tells the client where to find the data. The static export (scripts/export-static.js)
+// writes its own manifest without the species API.
+const manifest = {
+  version: dataVersion,
+  points: { url: 'data/points.bin', bytes: meta.byteLength },
+  speciesApi: true,
+};
 
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'X-Content-Type-Options': 'nosniff', ...headers });
@@ -74,7 +73,8 @@ function sendFile(req, res, filePath, { cache = 'no-cache', encodings = false } 
     if (/\bbr\b/.test(accept) && fs.existsSync(`${filePath}.br`)) {
       target = `${filePath}.br`;
       headers['Content-Encoding'] = 'br';
-    } else if (/\bgzip\b/.test(accept) && fs.existsSync(`${filePath}.gz`)) {
+    } else if ((/\bgzip\b/.test(accept) || !fs.existsSync(filePath)) && fs.existsSync(`${filePath}.gz`)) {
+      // The uncompressed points.bin isn't committed, so fresh clones always get the .gz copy.
       target = `${filePath}.gz`;
       headers['Content-Encoding'] = 'gzip';
     }
@@ -91,37 +91,23 @@ function sendFile(req, res, filePath, { cache = 'no-cache', encodings = false } 
   });
 }
 
-function readDetail(index) {
-  const start = detailOffsets[index];
-  const length = detailOffsets[index + 1] - start;
-  const buf = Buffer.alloc(length);
-  fs.readSync(detailsFd, buf, 0, length, start);
-  return JSON.parse(buf.toString('utf8'));
-}
-
 async function handle(req, res) {
   const url = new URL(req.url, 'http://localhost');
   const { pathname } = url;
 
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method not allowed');
 
+  if (pathname === '/data/manifest.json') return sendJson(req, res, 200, manifest);
+
   if (pathname.startsWith('/data/')) {
     const name = pathname.slice('/data/'.length);
-    if (!DATA_FILES.has(name)) return send(res, 404, 'Not found');
+    if (!DATA_FILE.test(name)) return send(res, 404, 'Not found');
     // Clients request ?v=<dataVersion>, so the files can be cached for a long time.
     const cache = url.searchParams.get('v') === dataVersion ? 'public, max-age=31536000, immutable' : 'no-cache';
     return sendFile(req, res, path.join(BUILD_DIR, name), { cache, encodings: true });
   }
 
-  if (pathname === '/api/version') return sendJson(req, res, 200, { version: dataVersion });
-
   let m;
-  if ((m = pathname.match(/^\/api\/occurrence\/(\d+)$/))) {
-    const index = Number(m[1]);
-    if (index >= meta.count) return sendJson(req, res, 404, { error: 'Unknown occurrence' });
-    return sendJson(req, res, 200, readDetail(index), 3600);
-  }
-
   if ((m = pathname.match(/^\/api\/species\/(\d+)$/))) {
     const idx = speciesByKey.get(m[1]);
     if (idx === undefined) return sendJson(req, res, 404, { error: 'Unknown species' });

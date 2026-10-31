@@ -1,4 +1,9 @@
 node_modules/
+dist/
 data/raw/
 data/cache/
-data/build/
+# data/build/ is committed so the site can be exported and deployed without refetching.
+# The uncompressed and brotli copies of points.bin are only needed by the Node server,
+# which falls back to the .gz copy.
+data/build/points.bin
+data/build/points.bin.br
