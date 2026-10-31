@@ -3,6 +3,8 @@
 A fast, mobile-friendly map of about half a million mushroom observations from
 [GBIF](https://www.gbif.org), built to help with foraging: where, when and what grows.
 
+**Live site:** https://kingknecht.github.io/shrooms/ ([source](https://github.com/KingKnecht/shrooms))
+
 - **WebGL rendering** of every point with deck.gl on top of MapLibre. Point and heatmap modes.
 - **Filters**: edibility (from Wikidata), season (months), years, type (fungal order),
   country, location accuracy, and herbarium specimens on or off. The year filter runs on the GPU.
@@ -47,7 +49,7 @@ It also decompresses the gzipped point data itself.
 
 `.github/workflows/pages.yml` runs the export and publishes it on every push to `master`.
 To enable it once, go to the repository's **Settings → Pages** and set **Source** to **GitHub Actions**.
-The site is then served at `https://<user>.github.io/<repo>/`.
+The site is then served at `https://<user>.github.io/<repo>/`, for example https://kingknecht.github.io/shrooms/.
 
 To update the data shown online, run `fetch-data` and `build-data`, then commit `data/build/` and push.
 
