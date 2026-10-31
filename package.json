@@ -1,0 +1,19 @@
+{
+  "name": "shrooms",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Map of mushroom occurrences for foragers, built on GBIF data",
+  "type": "module",
+  "scripts": {
+    "fetch-data": "node scripts/fetch-data.js",
+    "build-data": "node scripts/build-data.js",
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "deck.gl": "9.2",
+    "maplibre-gl": "^5.24.0"
+  }
+}
