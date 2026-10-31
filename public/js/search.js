@@ -1,4 +1,5 @@
 import { esc, fmt, normalize } from './util.js';
+import { t } from './i18n.js';
 
 const RANK_WEIGHT = { order: 4, family: 3, genus: 2, species: 1 };
 
@@ -45,7 +46,7 @@ export function setupSearch(input, list, app) {
       const common = ds.commonName(r.idx);
       return {
         name: common || `<i>${esc(ds.speciesName(r.idx))}</i>`,
-        sub: common ? `<i>${esc(ds.speciesName(r.idx))}</i>` : esc(ds.meta.species.de[r.idx] || ds.taxonName('family', ds.speciesFamily[r.idx])),
+        sub: common ? `<i>${esc(ds.speciesName(r.idx))}</i>` : esc(ds.taxonName('family', ds.speciesFamily[r.idx])),
       };
     }
     const name = ds.taxonName(r.rank, r.idx);
@@ -60,7 +61,7 @@ export function setupSearch(input, list, app) {
 
   function render() {
     if (!results.length) {
-      list.innerHTML = input.value.trim() ? '<li class="r-empty">No matching taxa in this dataset</li>' : '';
+      list.innerHTML = input.value.trim() ? `<li class="r-empty">${esc(t('search.none'))}</li>` : '';
       list.hidden = !input.value.trim();
       return;
     }
@@ -70,7 +71,7 @@ export function setupSearch(input, list, app) {
         return `<li role="option" data-i="${i}" aria-selected="${i === active}">
           <span class="r-name">${d.name}</span>
           <span class="r-sub">${d.sub}</span>
-          <span class="r-meta"><span class="r-rank">${r.rank}</span>${fmt(r.count)}</span>
+          <span class="r-meta"><span class="r-rank">${esc(t(`rank.${r.rank}`))}</span>${fmt(r.count)}</span>
         </li>`;
       })
       .join('');

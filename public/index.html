@@ -14,46 +14,46 @@
   <div id="map" aria-label="Map of mushroom occurrences"></div>
 
   <aside id="panel" class="panel" data-sheet="peek" aria-label="Controls">
-    <button class="sheet-handle" id="sheet-handle" aria-label="Resize panel"><span></span></button>
+    <button class="sheet-handle" id="sheet-handle" aria-label="Resize panel" data-i18n-aria-label="panel.resize"><span></span></button>
 
     <header class="panel-head">
       <div class="brand">
         <img src="icon.svg" alt="" width="28" height="28">
         <h1>Shrooms</h1>
-        <span class="brand-sub">mushroom occurrence map</span>
+        <span class="brand-sub" data-i18n="brand.sub">mushroom occurrence map</span>
       </div>
 
       <div class="search" role="combobox" aria-haspopup="listbox" aria-owns="search-results">
         <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.05l4.25 4.24-1.42 1.42-4.24-4.25A7.5 7.5 0 1 1 10.5 3Zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11Z"/></svg>
-        <input id="search" type="search" placeholder="Search species, genus, family…" autocomplete="off" spellcheck="false" aria-label="Search taxa" aria-autocomplete="list" aria-controls="search-results">
+        <input id="search" type="search" placeholder="Search species, genus, family…" data-i18n-placeholder="search.placeholder" autocomplete="off" spellcheck="false" aria-label="Search taxa" data-i18n-aria-label="search.label" aria-autocomplete="list" aria-controls="search-results">
         <ul id="search-results" class="search-results" role="listbox" hidden></ul>
       </div>
 
-      <div class="summary" id="summary" aria-live="polite">Loading…</div>
+      <div class="summary" id="summary" aria-live="polite" data-i18n="summary.loading">Loading…</div>
       <div class="active-taxon" id="active-taxon" hidden></div>
     </header>
 
     <nav class="tabs" role="tablist">
-      <button role="tab" data-tab="filters" aria-selected="true">Filters</button>
-      <button role="tab" data-tab="list" aria-selected="false">In view</button>
-      <button role="tab" data-tab="species" aria-selected="false">Details</button>
+      <button role="tab" data-tab="filters" aria-selected="true" data-i18n="tab.filters">Filters</button>
+      <button role="tab" data-tab="list" aria-selected="false" data-i18n="tab.list">In view</button>
+      <button role="tab" data-tab="species" aria-selected="false" data-i18n="tab.details">Details</button>
     </nav>
 
     <div class="panel-body">
       <section class="tab-page" id="tab-filters" role="tabpanel">
         <div class="field">
           <div class="field-head">
-            <h2>Edibility</h2>
-            <button class="link-btn" data-reset="categories">All</button>
+            <h2 data-i18n="filter.edibility">Edibility</h2>
+            <button class="link-btn" data-reset="categories" data-i18n="filter.all">All</button>
           </div>
           <div class="chips" id="filter-categories"></div>
-          <p class="note">Based on Wikidata. Most species have no edibility data and show as <em>unknown</em>.</p>
+          <p class="note" data-i18n-html="filter.edibilityNote">Based on Wikidata. Most species have no edibility data and show as <em>unknown</em>.</p>
         </div>
 
         <div class="field">
           <div class="field-head">
-            <h2>Season</h2>
-            <button class="link-btn" data-reset="months">All year</button>
+            <h2 data-i18n="filter.season">Season</h2>
+            <button class="link-btn" data-reset="months" data-i18n="filter.allYear">All year</button>
           </div>
           <div class="month-grid" id="filter-months"></div>
           <div class="chips presets" id="month-presets"></div>
@@ -61,12 +61,12 @@
 
         <div class="field">
           <div class="field-head">
-            <h2>Years</h2>
+            <h2 data-i18n="filter.years">Years</h2>
             <span class="range-label" id="year-label"></span>
           </div>
           <div class="dual-range" id="year-range">
-            <input type="range" id="year-min" aria-label="From year">
-            <input type="range" id="year-max" aria-label="To year">
+            <input type="range" id="year-min" aria-label="From year" data-i18n-aria-label="filter.yearFrom">
+            <input type="range" id="year-max" aria-label="To year" data-i18n-aria-label="filter.yearTo">
             <div class="dual-track"><div class="dual-fill" id="year-fill"></div></div>
           </div>
           <div class="chips presets" id="year-presets"></div>
@@ -74,19 +74,19 @@
 
         <div class="field">
           <div class="field-head">
-            <h2>Type</h2>
-            <button class="link-btn" data-reset="groups">All</button>
+            <h2 data-i18n="filter.type">Type</h2>
+            <button class="link-btn" data-reset="groups" data-i18n="filter.all">All</button>
           </div>
           <div class="chips" id="filter-groups"></div>
         </div>
 
         <div class="field two-col">
           <label>
-            <span class="label">Country</span>
-            <select id="filter-country"><option value="-1">All countries</option></select>
+            <span class="label" data-i18n="filter.country">Country</span>
+            <select id="filter-country"><option value="-1" data-i18n="filter.allCountries">All countries</option></select>
           </label>
           <label>
-            <span class="label">Location accuracy</span>
+            <span class="label" data-i18n="filter.accuracy">Location accuracy</span>
             <select id="filter-precision">
               <option value="Infinity">Any</option>
               <option value="10">Within 10 m</option>
@@ -100,50 +100,52 @@
         <div class="field">
           <label class="check">
             <input type="checkbox" id="filter-specimens" checked>
-            <span>Include herbarium specimens</span>
+            <span data-i18n="filter.specimens">Include herbarium specimens</span>
           </label>
         </div>
 
-        <button class="btn btn-ghost wide" id="reset-all">Reset all filters</button>
+        <button class="btn btn-ghost wide" id="reset-all" data-i18n="filter.resetAll">Reset all filters</button>
       </section>
 
       <section class="tab-page" id="tab-list" role="tabpanel" hidden>
-        <p class="note" id="list-note">Species with the most records in the current map view.</p>
+        <p class="note" id="list-note" data-i18n="list.note">Species with the most records in the current map view.</p>
         <ol class="species-list" id="species-list"></ol>
       </section>
 
       <section class="tab-page" id="tab-species" role="tabpanel" hidden>
         <div id="species-detail" class="species-detail">
           <div class="empty">
-            <p>Search for a species, pick one from <strong>In view</strong>, or tap a point on the map to see details here.</p>
+            <p data-i18n-html="details.empty">Search for a species, pick one from <strong>In view</strong>, or tap a point on the map to see details here.</p>
           </div>
         </div>
       </section>
     </div>
 
     <footer class="panel-foot">
-      Data: <a href="https://www.gbif.org" target="_blank" rel="noopener">GBIF.org</a>,
+      <span data-i18n="footer.data">Data:</span> <a href="https://www.gbif.org" target="_blank" rel="noopener">GBIF.org</a>,
       <a href="https://www.wikidata.org" target="_blank" rel="noopener">Wikidata</a>,
       <a href="https://www.inaturalist.org" target="_blank" rel="noopener">iNaturalist</a>.
       <span id="data-stamp"></span>
-      Never eat a wild mushroom you have not identified with certainty.
+      <span data-i18n="footer.warning">Never eat a wild mushroom you have not identified with certainty.</span>
     </footer>
   </aside>
 
   <div class="map-tools" id="map-tools">
-    <div class="segmented" role="radiogroup" aria-label="Display mode" id="mode-toggle">
-      <button role="radio" data-mode="points" aria-checked="true">Points</button>
-      <button role="radio" data-mode="heatmap" aria-checked="false">Heatmap</button>
+    <div class="segmented" role="radiogroup" aria-label="Display mode" data-i18n-aria-label="mode.label" id="mode-toggle">
+      <button role="radio" data-mode="points" aria-checked="true" data-i18n="mode.points">Points</button>
+      <button role="radio" data-mode="heatmap" aria-checked="false" data-i18n="mode.heatmap">Heatmap</button>
     </div>
     <div class="tool-menu">
-      <button class="tool-btn" id="layers-btn" aria-haspopup="true" aria-expanded="false" title="Map style and colours">
+      <button class="tool-btn" id="layers-btn" aria-haspopup="true" aria-expanded="false" title="Map style and colours" data-i18n-title="tools.title" data-i18n-aria-label="tools.title">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-7.06 8.62L12 15.5l7.06-3.88L21 12.7 12 17.7 3 12.7l1.94-1.08Zm0 4L12 19.5l7.06-3.88L21 16.7 12 21.7 3 16.7l1.94-1.08Z"/></svg>
       </button>
       <div class="popover" id="layers-popover" hidden>
-        <h3>Base map</h3>
+        <h3 data-i18n="tools.basemap">Base map</h3>
         <div class="option-list" id="basemap-options"></div>
-        <h3>Colour points by</h3>
+        <h3 data-i18n="tools.colorBy">Colour points by</h3>
         <div class="option-list" id="color-options"></div>
+        <h3 data-i18n="tools.language">Language</h3>
+        <div class="option-list" id="language-options"></div>
       </div>
     </div>
   </div>
@@ -153,7 +155,7 @@
   <div class="loading" id="loading">
     <div class="loading-card">
       <img src="icon.svg" alt="" width="56" height="56">
-      <p id="loading-text">Loading occurrences…</p>
+      <p id="loading-text" data-i18n="loading.text">Loading occurrences…</p>
       <div class="progress"><div id="loading-bar"></div></div>
     </div>
   </div>

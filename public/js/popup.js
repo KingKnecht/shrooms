@@ -1,10 +1,11 @@
 import { CATEGORIES } from './data.js';
-import { esc, rgb, safeUrl } from './util.js';
+import { esc, fmt, rgb, safeUrl } from './util.js';
+import { t } from './i18n.js';
 
 const BASIS_LABELS = {
-  HUMAN_OBSERVATION: 'Observation',
-  OBSERVATION: 'Observation',
-  PRESERVED_SPECIMEN: 'Herbarium specimen',
+  HUMAN_OBSERVATION: 'popup.observation',
+  OBSERVATION: 'popup.observation',
+  PRESERVED_SPECIMEN: 'popup.specimen',
 };
 
 // Per-point extras come in chunk files of meta.detailsChunk points each:
@@ -41,21 +42,21 @@ export async function showOccurrencePopup(app, index) {
     <div class="occ-body">
       <p class="occ-title">${common ? esc(common) : `<i>${esc(ds.speciesName(s))}</i>`}</p>
       ${common ? `<div class="occ-sci">${esc(ds.speciesName(s))}</div>` : ''}
-      <div class="occ-badge"><span class="dot" style="background:${rgb(cat.color)}"></span>${esc(cat.label)}</div>
+      <div class="occ-badge"><span class="dot" style="background:${rgb(cat.color)}"></span>${esc(t(`cat.${cat.id}`))}</div>
       <dl class="occ-meta">
-        <dt>Date</dt><dd>${app.formatDay(ds.day[index], ds.month[index])}</dd>
-        <dt>Accuracy</dt><dd>${unc === ds.meta.unknownUncertainty ? 'not stated' : `± ${unc.toLocaleString('en')} m`}</dd>
-        <dt>Position</dt><dd>${lat.toFixed(5)}, ${lon.toFixed(5)}</dd>
-        <dt>Country</dt><dd>${esc(ds.countryNames[ds.country[index]])}</dd>
-        <dt>Type</dt><dd>${BASIS_LABELS[ds.meta.basis[ds.basis[index]]] || 'Observation'}</dd>
+        <dt>${t('popup.date')}</dt><dd>${app.formatDay(ds.day[index], ds.month[index])}</dd>
+        <dt>${t('popup.accuracy')}</dt><dd>${unc === ds.meta.unknownUncertainty ? t('popup.notStated') : `± ${fmt(unc)} m`}</dd>
+        <dt>${t('popup.position')}</dt><dd>${lat.toFixed(5)}, ${lon.toFixed(5)}</dd>
+        <dt>${t('popup.country')}</dt><dd>${esc(ds.countryNames[ds.country[index]])}</dd>
+        <dt>${t('popup.type')}</dt><dd>${t(BASIS_LABELS[ds.meta.basis[ds.basis[index]]] || 'popup.observation')}</dd>
       </dl>
       <dl class="occ-meta" data-extra></dl>
       <div class="btn-row">
-        <button class="btn btn-primary" data-act="details">Species info</button>
-        <button class="btn" data-act="only">Only this species</button>
-        <a class="btn" data-gbif target="_blank" rel="noopener" hidden>GBIF record ↗</a>
+        <button class="btn btn-primary" data-act="details">${t('popup.speciesInfo')}</button>
+        <button class="btn" data-act="only">${t('popup.only')}</button>
+        <a class="btn" data-gbif target="_blank" rel="noopener" hidden>${t('popup.gbif')}</a>
         <a class="btn" target="_blank" rel="noopener"
-           href="https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lon.toFixed(6)}">Directions ↗</a>
+           href="https://www.google.com/maps/dir/?api=1&destination=${lat.toFixed(6)},${lon.toFixed(6)}">${t('popup.directions')}</a>
       </div>
     </div>`;
 
@@ -80,9 +81,9 @@ export async function showOccurrencePopup(app, index) {
   try {
     const [key, locality, recordedBy, dataset, image] = await loadDetails(ds, index);
     const rows = [
-      ['Locality', locality],
-      ['Recorded by', recordedBy],
-      ['Source', dataset],
+      [t('popup.locality'), locality],
+      [t('popup.recordedBy'), recordedBy],
+      [t('popup.source'), dataset],
     ].filter(([, v]) => v);
     root.querySelector('[data-extra]').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join('');
     const gbif = root.querySelector('[data-gbif]');

@@ -1,14 +1,15 @@
-import { CATEGORIES, GROUP_PALETTE, GROUP_OTHER, MONTHS, dateToDay } from './data.js';
+import { CATEGORIES, GROUP_PALETTE, GROUP_OTHER, dateToDay } from './data.js';
+import { MONTHS, t } from './i18n.js';
 import { GROUP_SLOTS } from './filters.js';
 import { esc, fmt, rgb } from './util.js';
 
 const $ = (sel) => document.querySelector(sel);
 
 const SEASONS = [
-  ['Spring', [3, 4, 5]],
-  ['Summer', [6, 7, 8]],
-  ['Autumn', [9, 10, 11]],
-  ['Winter', [12, 1, 2]],
+  ['preset.spring', [3, 4, 5]],
+  ['preset.summer', [6, 7, 8]],
+  ['preset.autumn', [9, 10, 11]],
+  ['preset.winter', [12, 1, 2]],
 ];
 
 // Toggle helper for multi-select chips: the first click on a fully-selected set
@@ -71,8 +72,8 @@ export class FiltersUI {
     el.innerHTML = order
       .map((id) => {
         const c = CATEGORIES[id];
-        return `<button class="chip" data-cat="${id}" aria-pressed="true" title="${fmt(counts[id])} records">
-          <span class="dot" style="background:${rgb(c.color)}"></span>${c.short}</button>`;
+        return `<button class="chip" data-cat="${id}" aria-pressed="true" title="${esc(t('filter.recordsTitle', { n: fmt(counts[id]) }))}">
+          <span class="dot" style="background:${rgb(c.color)}"></span>${esc(t(`catShort.${id}`))}</button>`;
       })
       .join('');
     el.addEventListener('click', (e) => {
@@ -94,7 +95,7 @@ export class FiltersUI {
 
   buildMonths() {
     const el = $('#filter-months');
-    el.innerHTML = MONTHS.map((m, i) => `<button data-month="${i + 1}" aria-pressed="true">${m}</button>`).join('');
+    el.innerHTML = MONTHS.map((m, i) => `<button data-month="${i + 1}" aria-pressed="true">${esc(m)}</button>`).join('');
     el.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-month]');
       if (!btn) return;
@@ -108,9 +109,9 @@ export class FiltersUI {
 
     const now = new Date().getMonth() + 1;
     const around = [((now + 10) % 12) + 1, now, (now % 12) + 1];
-    const presets = [['Now ±1 month', around], ...SEASONS];
+    const presets = [['preset.now', around], ...SEASONS];
     const pe = $('#month-presets');
-    pe.innerHTML = presets.map(([label], i) => `<button class="chip" data-preset="${i}">${label}</button>`).join('');
+    pe.innerHTML = presets.map(([key], i) => `<button class="chip" data-preset="${i}">${esc(t(key))}</button>`).join('');
     pe.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-preset]');
       if (!btn) return;
@@ -152,12 +153,12 @@ export class FiltersUI {
     this.yearMax.addEventListener('input', onInput);
 
     const presets = [
-      ['Last 3 years', maxYear - 2],
-      ['Last 10 years', maxYear - 9],
-      ['All', minYear],
+      ['preset.last3', maxYear - 2],
+      ['preset.last10', maxYear - 9],
+      ['preset.all', minYear],
     ];
     const pe = $('#year-presets');
-    pe.innerHTML = presets.map(([label], i) => `<button class="chip" data-y="${i}">${label}</button>`).join('');
+    pe.innerHTML = presets.map(([key], i) => `<button class="chip" data-y="${i}">${esc(t(key))}</button>`).join('');
     pe.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-y]');
       if (!btn) return;
@@ -203,8 +204,9 @@ export class FiltersUI {
     el.innerHTML = this.groupIds
       .map((o, i) => {
         const color = o === -1 ? GROUP_OTHER : GROUP_PALETTE[i] || GROUP_OTHER;
-        const label = o === -1 ? 'Other' : ds.orderLabel(o);
-        const title = o === -1 ? `${fmt(otherCount)} records` : `${ds.meta.orders.name[o]} · ${fmt(counts[o])} records`;
+        const label = o === -1 ? t('group.other') : ds.orderLabel(o);
+        const records = t('filter.recordsTitle', { n: fmt(o === -1 ? otherCount : counts[o]) });
+        const title = o === -1 ? records : `${ds.meta.orders.name[o]} · ${records}`;
         return `<button class="chip" data-group="${o}" aria-pressed="true" title="${esc(title)}">
           <span class="dot" style="background:${rgb(color)}"></span>${esc(label)}</button>`;
       })
@@ -238,6 +240,13 @@ export class FiltersUI {
       if (this.app.state.country >= 0) this.zoomToCountry(this.app.state.country);
     });
 
+    // Option values are metres; labels are localized here.
+    for (const opt of $('#filter-precision').options) {
+      const m = Number(opt.value);
+      opt.textContent = Number.isFinite(m)
+        ? t('filter.accuracyWithin', { d: m >= 1000 ? `${fmt(m / 1000)} km` : `${fmt(m)} m` })
+        : t('filter.accuracyAny');
+    }
     $('#filter-precision').addEventListener('change', (e) => {
       this.app.state.maxUncertainty = Number(e.target.value);
       this.app.applyFilters();
@@ -289,6 +298,6 @@ export class FiltersUI {
       (s.includeSpecimens ? 0 : 1) +
       (s.dayRange[0] > this.ds.minDay || s.dayRange[1] < this.ds.maxDay ? 1 : 0);
     const tab = document.querySelector('.tabs [data-tab="filters"]');
-    tab.innerHTML = active ? `Filters<span class="badge">${active}</span>` : 'Filters';
+    tab.innerHTML = `${esc(t('tab.filters'))}${active ? `<span class="badge">${active}</span>` : ''}`;
   }
 }

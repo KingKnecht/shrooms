@@ -1,53 +1,21 @@
 // Loads the columnar point dataset and exposes taxonomy lookups.
 
+import { lang, t, has } from './i18n.js';
+
+// Edibility categories; labels live in i18n.js (cat.N, catShort.N, advice.N).
 export const CATEGORIES = [
-  { id: 0, label: 'Unknown', short: 'Unknown', color: [214, 199, 168], alpha: 150 },
-  { id: 1, label: 'Choice edible', short: 'Choice', color: [62, 196, 112], alpha: 235 },
-  { id: 2, label: 'Edible', short: 'Edible', color: [158, 214, 92], alpha: 235 },
-  { id: 3, label: 'Edible with caution', short: 'Caution', color: [240, 192, 58], alpha: 235 },
-  { id: 4, label: 'Inedible', short: 'Inedible', color: [150, 140, 170], alpha: 220 },
-  { id: 5, label: 'Psychoactive', short: 'Psychoactive', color: [182, 120, 245], alpha: 235 },
-  { id: 6, label: 'Poisonous', short: 'Poisonous', color: [255, 128, 48], alpha: 240 },
-  { id: 7, label: 'Deadly poisonous', short: 'Deadly', color: [255, 45, 75], alpha: 250 },
+  { id: 0, color: [214, 199, 168], alpha: 150 },
+  { id: 1, color: [62, 196, 112], alpha: 235 },
+  { id: 2, color: [158, 214, 92], alpha: 235 },
+  { id: 3, color: [240, 192, 58], alpha: 235 },
+  { id: 4, color: [150, 140, 170], alpha: 220 },
+  { id: 5, color: [182, 120, 245], alpha: 235 },
+  { id: 6, color: [255, 128, 48], alpha: 240 },
+  { id: 7, color: [255, 45, 75], alpha: 250 },
 ];
 
-export const EDIBILITY_FLAGS = [
-  [1, 'Edible'],
-  [2, 'Choice edible'],
-  [4, 'Edible when cooked'],
-  [8, 'Caution'],
-  [16, 'Inedible'],
-  [32, 'Psychoactive'],
-  [64, 'Poisonous'],
-  [128, 'Deadly'],
-  [256, 'Medicinal'],
-];
-
-// Friendly names for the fungal orders used in the "Type" filter.
-export const ORDER_NAMES = {
-  Agaricales: 'Gilled mushrooms',
-  Boletales: 'Boletes & allies',
-  Russulales: 'Brittlegills & milkcaps',
-  Polyporales: 'Polypores',
-  Hymenochaetales: 'Bracket & crust fungi',
-  Cantharellales: 'Chanterelles & hedgehogs',
-  Pezizales: 'Cup fungi, morels & truffles',
-  Auriculariales: 'Jelly ears',
-  Tremellales: 'Jelly fungi',
-  Dacrymycetales: 'Yellow jelly fungi',
-  Phallales: 'Stinkhorns',
-  Geastrales: 'Earthstars',
-  Gomphales: 'Coral & club fungi',
-  Thelephorales: 'Earthfans',
-  Gloeophyllales: 'Gloeophyllum conks',
-  Corticiales: 'Corticioid crusts',
-  Hysterangiales: 'False truffles',
-  Atheliales: 'Athelioid crusts',
-  Trechisporales: 'Trechispora crusts',
-  Sebacinales: 'Sebacina jellies',
-  Amylocorticiales: 'Amylocorticioid crusts',
-  Filobasidiales: 'Filobasidium yeasts',
-};
+// Wikidata edibility bit flags (see scripts/build-data.js); labels are i18n flag.<bit>.
+export const EDIBILITY_FLAGS = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 
 export const GROUP_PALETTE = [
   [230, 120, 60], [90, 170, 230], [240, 200, 70], [120, 200, 120], [200, 110, 220],
@@ -63,9 +31,6 @@ export const AGE_RAMP = [
   [120, 205, 90],
   [250, 225, 60],
 ];
-
-export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-export const MONTH_INITIALS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 
 const EPOCH = Date.UTC(1900, 0, 1);
 const DAY_MS = 86_400_000;
@@ -153,7 +118,7 @@ export class Dataset {
 
     let regionNames = null;
     try {
-      regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+      regionNames = new Intl.DisplayNames([lang], { type: 'region' });
     } catch {
       // Older browsers: fall back to ISO codes.
     }
@@ -170,8 +135,10 @@ export class Dataset {
     return this.meta.species.name[i];
   }
 
+  // Common name in the UI language (the dataset has English and German), falling back to English.
   commonName(i) {
-    return this.meta.species.en[i] || '';
+    const sp = this.meta.species;
+    return sp[lang]?.[i] || sp.en[i] || '';
   }
 
   displayName(i) {
@@ -203,6 +170,6 @@ export class Dataset {
 
   orderLabel(o) {
     const name = this.meta.orders.name[o];
-    return ORDER_NAMES[name] || name;
+    return has(`order.${name}`) ? t(`order.${name}`) : name;
   }
 }
